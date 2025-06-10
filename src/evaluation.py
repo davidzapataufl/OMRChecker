@@ -233,6 +233,7 @@ class EvaluationConfig:
                 )
                 # TODO: use a common function for below changes?
                 in_omr = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+                in_omr_color = cv2.imread(image_path, cv2.IMREAD_COLOR)
                 in_omr = template.image_instance_ops.apply_preprocessors(
                     image_path, in_omr, template
                 )
@@ -248,6 +249,7 @@ class EvaluationConfig:
                 ) = template.image_instance_ops.read_omr_response(
                     template,
                     image=in_omr,
+                    color_image=in_omr_color,
                     name=image_path,
                     save_dir=None,
                 )

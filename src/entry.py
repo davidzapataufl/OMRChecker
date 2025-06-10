@@ -211,22 +211,24 @@ def process_files(
         files_counter += 1
         file_name = file_path.name
 
-        in_omr = cv2.imread(str(file_path), cv2.IMREAD_GRAYSCALE)
+        # Read both grayscale and color versions
+        in_omr_gray = cv2.imread(str(file_path), cv2.IMREAD_GRAYSCALE)
+        in_omr_color = cv2.imread(str(file_path), cv2.IMREAD_COLOR)
 
         logger.info("")
         logger.info(
-            f"({files_counter}) Opening image: \t'{file_path}'\tResolution: {in_omr.shape}"
+            f"({files_counter}) Opening image: \t'{file_path}'\tResolution: {in_omr_gray.shape}"
         )
 
         template.image_instance_ops.reset_all_save_img()
 
-        template.image_instance_ops.append_save_img(1, in_omr)
+        template.image_instance_ops.append_save_img(1, in_omr_gray)
 
-        in_omr = template.image_instance_ops.apply_preprocessors(
-            file_path, in_omr, template
+        in_omr_gray = template.image_instance_ops.apply_preprocessors(
+            file_path, in_omr_gray, template
         )
 
-        if in_omr is None:
+        if in_omr_gray is None:
             # Error OMR case
             new_file_path = outputs_namespace.paths.errors_dir.joinpath(file_name)
             outputs_namespace.OUTPUT_SET.append(
@@ -259,7 +261,7 @@ def process_files(
             multi_marked,
             _,
         ) = template.image_instance_ops.read_omr_response(
-            template, image=in_omr, name=file_id, save_dir=save_dir
+            template, image=in_omr_gray, color_image=in_omr_color, name=file_id, save_dir=save_dir
         )
 
         # TODO: move inner try catch here

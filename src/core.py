@@ -36,7 +36,7 @@ class ImageInstanceOps:
             in_omr = pre_processor.apply_filter(in_omr, file_path)
         return in_omr
 
-    def read_omr_response(self, template, image, name, save_dir=None):
+    def read_omr_response(self, template, image, color_image, name, save_dir=None):
         config = self.tuning_config
         auto_align = config.alignment_params.auto_align
         try:
@@ -50,6 +50,12 @@ class ImageInstanceOps:
             # Processing copies
             transp_layer = img.copy()
             final_marked = img.copy()
+
+            # Create color version of final_marked for output
+            final_marked_color = color_image.copy()
+            final_marked_color = ImageUtils.resize_util(
+                final_marked_color, template.page_dimensions[0], template.page_dimensions[1]
+            )
 
             morph = img.copy()
             self.append_save_img(3, morph)
@@ -256,20 +262,22 @@ class ImageInstanceOps:
             #     appendSaveImg(5,hist)
             #     appendSaveImg(2,hist)
 
-            per_omr_threshold_avg, total_q_strip_no, total_q_box_no = 0, 0, 0
+            # Initialize variables
+            total_q_strip_no = 0
+            total_q_box_no = 0
+            per_omr_threshold_avg = 0
+            key = None
+
+            # Apply the same markings to both grayscale and color images
             for field_block in template.field_blocks:
                 block_q_strip_no = 1
                 box_w, box_h = field_block.bubble_dimensions
                 shift = field_block.shift
                 s, d = field_block.origin, field_block.dimensions
                 key = field_block.name[:3]
-                # cv2.rectangle(final_marked,(s[0]+shift,s[1]),(s[0]+shift+d[0],
-                #   s[1]+d[1]),CLR_BLACK,3)
                 for field_block_bubbles in field_block.traverse_bubbles:
                     # All Black or All White case
                     no_outliers = all_q_std_vals[total_q_strip_no] < global_std_thresh
-                    # print(total_q_strip_no, field_block_bubbles[0].field_label,
-                    #   all_q_std_vals[total_q_strip_no], "no_outliers:", no_outliers)
                     per_q_strip_threshold = self.get_local_threshold(
                         all_q_strip_arrs[total_q_strip_no],
                         global_thr,
@@ -277,21 +285,8 @@ class ImageInstanceOps:
                         f"Mean Intensity Histogram for {key}.{field_block_bubbles[0].field_label}.{block_q_strip_no}",
                         config.outputs.show_image_level >= 6,
                     )
-                    # print(field_block_bubbles[0].field_label,key,block_q_strip_no, "THR: ",
-                    #   round(per_q_strip_threshold,2))
                     per_omr_threshold_avg += per_q_strip_threshold
 
-                    # Note: Little debugging visualization - view the particular Qstrip
-                    # if(
-                    #     0
-                    #     # or "q17" in (field_block_bubbles[0].field_label)
-                    #     # or (field_block_bubbles[0].field_label+str(block_q_strip_no))=="q15"
-                    #  ):
-                    #     st, end = qStrip
-                    #     InteractionUtils.show("QStrip: "+key+"-"+str(block_q_strip_no),
-                    #     img[st[1] : end[1], st[0]+shift : end[0]+shift],0,config=config)
-
-                    # TODO: get rid of total_q_box_no
                     detected_bubbles = []
                     for bubble in field_block_bubbles:
                         bubble_is_marked = (
@@ -300,25 +295,35 @@ class ImageInstanceOps:
                         total_q_box_no += 1
                         if bubble_is_marked:
                             detected_bubbles.append(bubble)
-                            x, y, field_value = (
-                                bubble.x + field_block.shift,
-                                bubble.y,
-                                bubble.field_value,
-                            )
+                            x, y = (bubble.x + field_block.shift, bubble.y)
+                            # Mark on grayscale image
                             cv2.rectangle(
                                 final_marked,
                                 (int(x + box_w / 12), int(y + box_h / 12)),
-                                (
-                                    int(x + box_w - box_w / 12),
-                                    int(y + box_h - box_h / 12),
-                                ),
+                                (int(x + box_w - box_w / 12), int(y + box_h - box_h / 12)),
                                 constants.CLR_DARK_GRAY,
                                 3,
                             )
-
                             cv2.putText(
                                 final_marked,
-                                str(field_value),
+                                str(bubble.field_value),
+                                (x, y),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                constants.TEXT_SIZE,
+                                (20, 20, 10),
+                                int(1 + 3.5 * constants.TEXT_SIZE),
+                            )
+                            # Mark on color image
+                            cv2.rectangle(
+                                final_marked_color,
+                                (int(x + box_w / 12), int(y + box_h / 12)),
+                                (int(x + box_w - box_w / 12), int(y + box_h - box_h / 12)),
+                                constants.CLR_DARK_GRAY,
+                                3,
+                            )
+                            cv2.putText(
+                                final_marked_color,
+                                str(bubble.field_value),
                                 (x, y),
                                 cv2.FONT_HERSHEY_SIMPLEX,
                                 constants.TEXT_SIZE,
@@ -326,13 +331,20 @@ class ImageInstanceOps:
                                 int(1 + 3.5 * constants.TEXT_SIZE),
                             )
                         else:
+                            x, y = (bubble.x + field_block.shift, bubble.y)
+                            # Mark on grayscale image
                             cv2.rectangle(
                                 final_marked,
                                 (int(x + box_w / 10), int(y + box_h / 10)),
-                                (
-                                    int(x + box_w - box_w / 10),
-                                    int(y + box_h - box_h / 10),
-                                ),
+                                (int(x + box_w - box_w / 10), int(y + box_h - box_h / 10)),
+                                constants.CLR_GRAY,
+                                -1,
+                            )
+                            # Mark on color image
+                            cv2.rectangle(
+                                final_marked_color,
+                                (int(x + box_w / 10), int(y + box_h / 10)),
+                                (int(x + box_w - box_w / 10), int(y + box_h - box_h / 10)),
                                 constants.CLR_GRAY,
                                 -1,
                             )
@@ -349,8 +361,6 @@ class ImageInstanceOps:
                             if multi_marked_local
                             else field_value
                         )
-                        # TODO: generalize this into identifier
-                        # multi_roll = multi_marked_local and "Roll" in str(q)
                         multi_marked = multi_marked or multi_marked_local
 
                     if len(detected_bubbles) == 0:
@@ -366,7 +376,6 @@ class ImageInstanceOps:
 
                     block_q_strip_no += 1
                     total_q_strip_no += 1
-                # /for field_block
 
             per_omr_threshold_avg /= total_q_strip_no
             per_omr_threshold_avg = round(per_omr_threshold_avg, 2)
@@ -408,13 +417,24 @@ class ImageInstanceOps:
                     "Template Alignment Adjustment", final_align, 0, 0, config=config
                 )
 
+            if config.outputs.show_image_level >= 2:
+                InteractionUtils.show(
+                    f"Final Marked Bubbles : '{name}'",
+                    ImageUtils.resize_util_h(
+                        final_marked_color, int(config.dimensions.display_height * 1.3)
+                    ),
+                    1,
+                    1,
+                    config=config,
+                )
+
             if config.outputs.save_detections and save_dir is not None:
                 if multi_roll:
                     save_dir = save_dir.joinpath("_MULTI_")
                 image_path = str(save_dir.joinpath(name))
-                ImageUtils.save_img(image_path, final_marked)
+                ImageUtils.save_img(image_path, final_marked_color)
 
-            self.append_save_img(2, final_marked)
+            self.append_save_img(2, final_marked_color)
 
             if save_dir is not None:
                 for i in range(config.outputs.save_image_level):
